@@ -8,8 +8,8 @@ object Main {
   def main(args: Array[String]): Unit = {
 
     val src = io.Source.fromFile("input.csv")
-    //Iterator[String] => List[Array[String]]
-    val input = src.getLines.map { line => line.split(",") }.toList
+    //Iterator[String] => List[Seq[String]]
+    val input = src.getLines.map { line => line.split(",").toSeq }.toList
     src.close
     print("Available Columns to pivot: " + input(0).mkString(",") + "\nChoose 2 (ColInput,RowInput):")
     val pivotParams = readLine(" ").split(",")
@@ -17,86 +17,68 @@ object Main {
     for (data <- result) println(data.mkString(","))
   }
 
-  def pivot(input: List[Array[String]], colInput: String, rowInput: String): List[Array[String]] = {
+  /*def userEntry(userInput: String): Seq[String] = {
+      //TODO Validate user entry.
+      try {
+        userInput.split(",").toSeq
+      } catch {
+        case _ : Throwable => userEntry(readLine("Invalid Input! \nEnter Inputs Again: "))
+      }
+    }*/
+
+  def pivot(input: List[Seq[String]], colInput: String, rowInput: String): List[Seq[String]] = {
 
     println("Running Pivot")
     //to get index of elements to pivot
-    val header = input(0).zipWithIndex
+    val header = input(0)
 
     //get index to filter wanted and unwanted values
     val colIndex = getIndex(header, colInput)
     val rowIndex = getIndex(header, rowInput)
 
-    //List[Array(String)] => List[toPivot]
+    //List[IndexedSeq(String)] => List[toPivot]
     val toPivot = input.drop(1).map { i => ToPivot(i(colIndex), i(rowIndex)) }
 
     //Map(ToPivot(col,row) -> count :Int,
     val pivotCount = toPivot.groupBy(identity).view.mapValues(_.size).toMap
-    val pivotHeader = pivotCount.keys.map { key => key.col }.toList.distinct
+    val pivotHeader = pivotCount.keys.map { key => key.col }.toSeq.distinct
     val pivotRHeader = pivotCount.keys.map { key => key.row }.toList.distinct
 
-    //zipwithIndex pivotHeader to get row number
-    val pivotRowIdx = pivotRHeader.zipWithIndex
-
-    val allCombi = (0 until pivotHeader.size).flatMap {
-      i =>
-        pivotRowIdx.map {
-          case (row, idx) => (ToPivot(pivotHeader(i), row), idx)
-          //?((pivotHeader(i),row),idx) IndexedSeq[(String,String),Int]
+    val allCombi = pivotHeader.flatMap {
+      colHeader =>
+        pivotRHeader.map {
+          rowHeader => (ToPivot(pivotHeader(pivotHeader.indexOf(colHeader)), rowHeader), pivotRHeader.indexOf(rowHeader))
         }
-    }
+    } //List[ToPivot(String,String),Int]
 
-    val sortedPivot = (0 until pivotRHeader.size).map {
-      i =>
+    //returns collection sorted by row index (pivotRHeader(i))
+    val sortedPivot = pivotRHeader.map {
+      rowHeader =>
         allCombi.flatMap {
-          case (p: ToPivot, idx: Int) => if (idx == i) {
+          case (p: ToPivot, idx: Int) => if (idx == pivotRHeader.indexOf(rowHeader)) {
             Some(mapMatcher(p, pivotCount))
           }
           else None
         }
     }
 
-    val finalPivot = sortedPivot.zip(pivotRHeader).map {
-      case (i, rowHead) => (rowHead +: i.map(_.toString)).toArray
-    }.toList
+    val pivotBody = sortedPivot.map {
+      i => prepareData(i, pivotRHeader(sortedPivot.indexOf(i)))
+    }
 
     //Return List((colInput,colHeader,colHeader) , (colRow,i,i), (colRow,i,i)...)
-    List(Array(prepareHeader(pivotHeader, rowInput).mkString(",")))
-    prepareHeader(pivotHeader, rowInput) +: finalPivot
+    prepareData(pivotHeader, rowInput) +: pivotBody
   }
 
-  def mapMatcher(toMatch: ToPivot, mapMatch: Map[ToPivot, Int]): Int = {
-    if (mapMatch.contains(toMatch)) {
-      mapMatch.filter(i => i._1 == toMatch).values.head
-    }
-    else 0
+  def getIndex(header: Seq[String], colName: String): Int = {
+    header.indexOf(colName)
   }
 
-  def prepareData(rowHeader: String, data: IndexedSeq[Int]): IndexedSeq[Any] = {
-    rowHeader +: data
+  def mapMatcher(toMatch: ToPivot, mapMatch: Map[ToPivot, Int]): String = {
+    mapMatch.getOrElse(toMatch, 0).toString
   }
 
-  def prepareHeader(pivotHeader: List[String], rowInput: String): Array[String] = {
-
-    rowInput +: (0 until pivotHeader.size).map {
-      idx => pivotHeader(idx)
-    }.toArray
-  }
-
-  def getIndex(i: Array[(String, Int)], j: String): Int = {
-
-    i.flatMap {
-      case (header: String, index: Int) => if (header == j) Some(index) else None
-    }.head
-  }
-
-  def userEntry(userInput: String): Set[String] = {
-    //TODO Validate user entry.
-    try {
-      userInput.split(",").toSet
-    }
-    catch {
-      case _: Throwable => userEntry(readLine("Invalid Input! \nEnter Inputs Again: "))
-    }
+  def prepareData(genData: Seq[String], input: String): Seq[String] = {
+    input +: genData
   }
 }
